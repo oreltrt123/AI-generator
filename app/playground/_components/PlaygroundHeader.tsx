@@ -16,7 +16,7 @@ function PlaygroundHeader({ onSave }: Props) {
 
   return (
     <div className='flex justify-between items-center p-1'>
-        <Image className='mt-15 ml-4 absolute' src={'/logo.svg'} alt='logo' width={140} height={140}/>
+        <Image className='mt-9 ml-2 absolute' src={'/logoIcon.png'} alt='logo' width={50} height={140}/>
         {/* <Button onClick={handleSave}>
           <Save className="mr-2 h-4 w-4" />
           Save

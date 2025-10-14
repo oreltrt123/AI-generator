@@ -21,7 +21,7 @@ Output ONLY the improved text. No explanations, no markdown, just the plain impr
     const response = await axios.post(
       "https://openrouter.ai/api/v1/chat/completions",
       {
-        model: "deepseek/deepseek-chat",
+        model: "deepseek/deepseek-chat-v3.1:free",
         messages: [{ role: "user", content: improvePrompt }],
         stream: false,
       },

@@ -27,13 +27,13 @@ export default function WorkspaceLayout({
 
   return (
     <SidebarProvider>
-      <UserDetailContext.Provider value={{ userDetail, setUserDetail }}>
-        <AppSidebar />
+      {/* <UserDetailContext.Provider value={{ userDetail, setUserDetail }}>
+        <AppSidebar /> */}
         <main className="flex-1">
           <AppHeader />
           {children}
         </main>
-      </UserDetailContext.Provider>
+      {/* </UserDetailContext.Provider> */}
     </SidebarProvider>
   );
 }

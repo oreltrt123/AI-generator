@@ -1,0 +1,10 @@
+.r2552esf25_252trewt3erblueFont:focus { 
+  border: 1px solid rgb(0, 153, 255);
+}
+.r2552esf25_252trewt3erblueFontDocs {
+  padding: 4px 8px;              /* Smaller padding */
+  font-size: 12px;               /* Smaller text size */
+  border: 1px solid #88888800;
+  border-radius: 6px;            /* Slightly smaller radius */
+  height: 28px;                  /* Controls overall height */
+}

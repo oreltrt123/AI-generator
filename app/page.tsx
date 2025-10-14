@@ -1,12 +1,21 @@
-import Image from "next/image";
-import Header from "./_components/Header";
-import Hero from "./_components/Hero";
+"use client"
 
-export default function Home() {
+import React from 'react'
+import Hero from './_components/Hero'
+import AppHeader from "./workspace/_components/AppHeader"
+import {
+  SidebarProvider,
+} from "@/components/ui/sidebar"
+
+function Workspace() {
   return (
-  <div>
-    <Header />
-    <Hero />
-  </div>
-  );
+    <SidebarProvider>
+      <main className="flex-1">
+        <AppHeader />
+        <Hero />
+      </main>
+    </SidebarProvider>
+  )
 }
+
+export default Workspace

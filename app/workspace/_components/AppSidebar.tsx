@@ -10,14 +10,24 @@ import {
 } from "@/components/ui/sidebar";
 import Link from "next/link";
 import Image from "next/image";
-import { useContext, useState } from "react";
-import { UserDetailContext } from "../../../context/UserDetailContext"; // Direct import
+import { useContext, useEffect, useState } from "react";
+import { UserDetailContext } from "../../../context/UserDetailContext";
 import { Progress } from "@/components/ui/progress";
 import { UserButton } from "@clerk/nextjs";
+import axios from "axios";
 
 export function AppSidebar() {
-  const [projectList, setprojectList] = useState([]);
+  const [projectList, setProjectList] = useState([]);
   const { userDetail, setUserDetail } = useContext(UserDetailContext);
+
+  useEffect(() => {
+    GetProjectList();
+  }, []);
+
+  const GetProjectList = async () => {
+    const result = await axios.get('/api/get-all-projects');
+    setProjectList(result.data);
+  };
 
   if (!userDetail) {
     return (
@@ -33,12 +43,23 @@ export function AppSidebar() {
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
-            <SidebarGroupLabel>Project</SidebarGroupLabel>
-            {projectList.length == 0 && (
+            <SidebarGroupLabel>Projects</SidebarGroupLabel>
+            {projectList.length === 0 ? (
               <h2 className="text-sm px-2 text-gray-500">No Project Found</h2>
+            ) : (
+              projectList.map((project: any) => (
+                <Link
+                  key={project.projectId}
+                  href={`/project/${project.projectId}`}
+                  className="w-full"
+                >
+                  <Button variant="ghost" className="w-full justify-start my-1">
+                    Project {project.projectId}
+                  </Button>
+                </Link>
+              ))
             )}
           </SidebarGroup>
-          <SidebarGroup />
         </SidebarContent>
         <SidebarFooter>
           <div className="p-4 text-center text-muted-foreground">
@@ -64,12 +85,23 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Project</SidebarGroupLabel>
-          {projectList.length == 0 && (
+          <SidebarGroupLabel>Projects</SidebarGroupLabel>
+          {projectList.length === 0 ? (
             <h2 className="text-sm px-2 text-gray-500">No Project Found</h2>
+          ) : (
+            projectList.map((project: any) => (
+              <Link
+                key={project.projectId}
+                href={`/playground/${project.projectId}`}
+                className="w-full"
+              >
+                <Button variant="ghost" className="w-full justify-start my-1">
+                  {project.projectId}
+                </Button>
+              </Link>
+            ))
           )}
         </SidebarGroup>
-        <SidebarGroup />
       </SidebarContent>
       <SidebarFooter>
         <div className="p-3 border rounded-xl space-y-3 bg-secondary">
