@@ -1,0 +1,24 @@
+.blueChatAI {
+  /* Remove the constant box-shadow to have no shadow by default */
+  /* Use the inline bg-[#333437] from Tailwind or set it here */
+  background-color: #333437; /* Matches your inline bg-[#333437] */
+}
+
+.blueChatAI:focus {
+  animation: shadow 2.8s alternate infinite;
+}
+
+@keyframes shadow {
+  0% {
+    box-shadow: #ab0bdc 0rem 0rem 0.5rem, #0b8fdc 0rem 0rem 0.5rem;
+  }
+  33% {
+    box-shadow: #0b8fdc 0rem 0rem 0.5rem, #0e0bdc 0rem 0rem 0.5rem;
+  }
+  66% {
+    box-shadow: #0e0bdc 0rem 0rem 0.5rem, #dc0bc0 0rem 0rem 0.5rem;
+  }
+  100% {
+    box-shadow: #dc0bc0 0rem 0rem 0.5rem, #ab0bdc 0rem 0rem 0.5rem;
+  }
+}

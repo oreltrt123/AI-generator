@@ -141,7 +141,7 @@ export default function DeployButton({ projectFiles, projectId }: Props) {
       <Button
         onClick={handleDeploy}
         disabled={isDeploying || projectFiles.length === 0}
-        className="r2552esf25_252trewt3erblueFontDocs bg-gray-300 text-black hover:bg-gray-300"
+        className=" bg-[#333437] border border-[#444547] text-white hover:bg-[#3e3f42]"
       >
         {isDeploying ? (
           <>
@@ -151,7 +151,7 @@ export default function DeployButton({ projectFiles, projectId }: Props) {
         ) : (
           <>
             <Rocket className="w-4 h-4 mr-2" />
-            Deploy to Vercel
+            Publish
           </>
         )}
       </Button>

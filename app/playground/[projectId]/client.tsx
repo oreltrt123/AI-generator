@@ -5,9 +5,8 @@ import { useParams, useSearchParams } from "next/navigation"
 import PlaygroundHeader from "../_components/PlaygroundHeader"
 import ChatSection from "../_components/ChatSection"
 import WebsiteDesign from "../_components/WebsiteDesign"
-import { detectPackagesFromFiles } from "@/lib/package-detector"
 import axios from "axios"
-import { useEffect, useRef, useState, useId } from "react"
+import { useEffect, useRef, useState } from "react"
 
 export type Frame = {
   projectId: string
@@ -15,11 +14,22 @@ export type Frame = {
   designCode: string
   chatMessages: Messages[]
   projectFiles?: ProjectFile[]
+  prdData?: PRDData
+  variants?: Variant[]
+}
+
+export type Variant = {
+  id?: number
+  variantNumber: number
+  projectFiles: ProjectFile[]
+  prdData?: PRDData
+  imageUrls?: string[]
 }
 
 export type Messages = {
   role: string
   content: string
+  streaming?: boolean
 }
 
 export type ProjectFile = {
@@ -27,204 +37,132 @@ export type ProjectFile = {
   content: string
 }
 
+export type PRDData = {
+  features: string[]
+  reasoning: string
+  techStack: string[]
+  architecture: string
+  userFlow: string[]
+  timestamp: string
+}
+
 const Prompt = `
-You are an expert Next.js and TypeScript developer. Generate complete, production-ready Next.js projects with BEAUTIFUL, PROFESSIONAL CSS styling.
+You are an expert full-stack developer. Generate complete, production-ready projects with BEAUTIFUL, PROFESSIONAL styling based on the selected programming language/framework.
 
 User Request: {userInput}
+Selected Language/Framework: {selectedLanguage}
+Variant Number: {variantNumber} of 4
 
 {databaseContext}
 
 CRITICAL INSTRUCTIONS:
 
-1. **Always Generate Multi-File Next.js Projects** - Unless the user is just greeting you (like "Hi", "Hello"), ALWAYS generate a complete Next.js project structure with TypeScript.
+**IMPORTANT: You are generating VARIANT #{variantNumber} of 4 different design approaches.**
+Each variant should have a DISTINCTLY DIFFERENT design approach:
+- Variant 1: Modern minimalist with clean lines and lots of whitespace
+- Variant 2: Bold and colorful with vibrant gradients and animations
+- Variant 3: Professional corporate style with structured layouts
+- Variant 4: Creative and artistic with unique layouts and typography
+
+Make sure this variant has a UNIQUE visual identity compared to the others!
+
+1. **Language-Specific Project Generation**:
+   
+   **For HTML, CSS, JavaScript** (html):
+   - Create standalone HTML files with embedded or linked CSS and JavaScript
+   - Use modern CSS (Flexbox, Grid, CSS Variables)
+   - Include responsive design with media queries
+   - Generate clean, semantic HTML5
+   - Required files: index.html, style.css, script.js (and additional pages as needed)
+   - Example structure:
+     * index.html (main page)
+     * about.html (if requested)
+     * style.css (all styling)
+     * script.js (interactivity)
+   
+   **For Python** (python):
+   - Create Python scripts or Flask/Django applications as appropriate
+   - Include requirements.txt for dependencies
+   - Use proper Python conventions (PEP 8)
+   - For web apps: create templates, static files, and routes
+   - Required files: main.py or app.py, requirements.txt, README.md
+   - Example structure:
+     * app.py (Flask application)
+     * requirements.txt (dependencies)
+     * templates/index.html
+     * static/style.css
+   
+   **For Next.js + TypeScript** (nextjs) - DEFAULT:
+   - Create complete Next.js 14+ App Router projects
+   - Use TypeScript for all files
+   - Include app/page.tsx, app/layout.tsx, app/globals.css, public/style.css
+   - Link CSS in layout.tsx: <link rel="stylesheet" href="/style.css" />
+   - Required files: app/page.tsx, app/layout.tsx, app/globals.css, public/style.css, package.json, tsconfig.json, next.config.ts
+   
+   **For Vite + React** (vite):
+   - Create Vite-based React project structure
+   - Use modern React hooks and functional components
+   - Include vite.config.ts, index.html, src/main.tsx, src/App.tsx
+   - Required files: vite.config.ts, index.html, src/main.tsx, src/App.tsx, src/index.css, package.json
+   
+   **For Vue.js** (vue):
+   - Create Vue 3 Composition API project
+   - Use Single File Components (.vue files)
+   - Include proper Vue Router setup if multiple pages
+   - Required files: src/App.vue, src/main.ts, index.html, package.json, vite.config.ts
+   
+   **For React** (react):
+   - Create standard React application
+   - Use Create React App or similar structure
+   - Include src/App.js, src/index.js, public/index.html
+   - Required files: src/App.js, src/index.js, public/index.html, src/index.css, package.json
 
 2. **Database Integration** - {databaseInstructions}
 
-3. **MUST Include Beautiful CSS Styling**:
-   - Create a public/style.css file with comprehensive, professional CSS
-   - Include styles for buttons, inputs, cards, typography, colors, and layouts
-   - Add hover effects, transitions, and smooth animations
-   - Use a cohesive color palette (choose 3-5 colors that work well together)
-   - Make it responsive with media queries
-   - Add shadows, rounded corners, and modern design elements
+3. **MUST Include Beautiful Styling**:
+   - For web projects: Create comprehensive CSS with modern design
+   - Use cohesive color palettes (3-5 colors) - DIFFERENT for each variant!
+   - Add hover effects, transitions, and animations
+   - Make responsive with proper breakpoints
+   - Include shadows, rounded corners, and modern UI elements
+   - For HTML projects: Use style.css
+   - For React/Vue/Svelte: Use component-scoped styles or CSS modules
+   - For Next.js: Use both globals.css and public/style.css
 
-4. **Required Files**:
-   - app/page.tsx (main page component)
-   - app/layout.tsx (root layout that links the CSS file)
-   - public/style.css (comprehensive CSS with all styling)
-   - Any additional components in components/ folder if needed
-   {databaseFiles}
-
-5. **app/layout.tsx Structure** - MUST link the CSS file:
-   \`\`\`typescript
-   import type { Metadata } from "next"
-   import "./globals.css"
-
-   export const metadata: Metadata = {
-     title: "Generated App",
-     description: "Generated by AI",
-   }
-
-   export default function RootLayout({
-     children,
-   }: {
-     children: React.ReactNode
-   }) {
-     return (
-       <html lang="en">
-         <head>
-           <link rel="stylesheet" href="/style.css" />
-         </head>
-         <body>{children}</body>
-       </html>
-     )
-   }
-   \`\`\`
-
-6. **app/globals.css Structure** - Basic Tailwind setup:
-   \`\`\`css
-   @tailwind base;
-   @tailwind components;
-   @tailwind utilities;
-   \`\`\`
-
-7. **public/style.css Structure** - MUST include comprehensive styling:
-   \`\`\`css
-   /* Reset and Base Styles */
-   * {
-     margin: 0;
-     padding: 0;
-     box-sizing: border-box;
-   }
-
-   body {
-     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-     line-height: 1.6;
-     color: #333;
-     background: #f8fafc;
-   }
-
-   /* Container */
-   .container {
-     max-width: 1200px;
-     margin: 0 auto;
-     padding: 20px;
-   }
-
-   /* Buttons */
-   button, .btn {
-     height: 55px;
-     background: #F2F2F2;
-     border-radius: 11px;
-     border: 0;
-     outline: none;
-     color: #ffffff;
-     font-size: 13px;
-     font-weight: 700;
-     background: linear-gradient(180deg, #363636 0%, #1B1B1B 50%, #000000 100%);
-     box-shadow: 0px 0px 0px 0px #FFFFFF, 0px 0px 0px 0px #000000;
-     transition: all 0.3s cubic-bezier(0.15, 0.83, 0.66, 1);
-   }
-
-   button:hover, .btn:hover {
-     box-shadow: 0px 0px 0px 2px #FFFFFF, 0px 0px 0px 4px #0000003a;
-   }
-
-   /* Inputs */
-   input, textarea, select {
-     width: 100%;
-     padding: 12px 16px;
-     font-size: 16px;
-     border: 2px solid #e2e8f0;
-     border-radius: 8px;
-     transition: all 0.3s ease;
-     background: white;
-   }
-
-   input:focus, textarea:focus, select:focus {
-     outline: none;
-     border-color: #667eea;
-     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-   }
-
-   /* Cards */
-   .card {
-     background: white;
-     border-radius: 16px;
-     padding: 24px;
-     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.07);
-     transition: all 0.3s ease;
-   }
-
-   .card:hover {
-     transform: translateY(-4px);
-     box-shadow: 0 12px 24px rgba(0, 0, 0, 0.12);
-   }
-
-   /* Typography */
-   h1 {
-     font-size: 3rem;
-     font-weight: 800;
-     margin-bottom: 1rem;
-     color: #1e293b;
-   }
-
-   h2 {
-     font-size: 2.25rem;
-     font-weight: 700;
-     margin-bottom: 0.75rem;
-     color: #334155;
-   }
-
-   p {
-     font-size: 1.125rem;
-     line-height: 1.7;
-     color: #64748b;
-     margin-bottom: 1rem;
-   }
-   \`\`\`
-
-8. **Response Format**:
-   You MUST respond with a JSON object containing an array of files and image URLs.
+4. **Response Format**:
+   You MUST respond with a JSON object containing an array of files AND a prd object.
    
    {
      "files": [
        {
-         "path": "app/page.tsx",
+         "path": "appropriate/file/path",
          "content": "... full file content ..."
-       },
-       {
-         "path": "app/layout.tsx",
-         "content": "... full layout file with CSS link ..."
-       },
-       {
-         "path": "app/globals.css",
-         "content": "... Tailwind CSS setup ..."
-       },
-       {
-         "path": "public/style.css",
-         "content": "... comprehensive CSS styling ..."
        }
-       {databaseFilesExample}
      ],
-     "imageUrls": ["url1", "url2", ...]
+     "imageUrls": ["url1", "url2", ...],
+     "prd": {
+       "features": ["Feature 1: Description", "Feature 2: Description", ...],
+       "reasoning": "Detailed explanation of why you chose this approach, technologies, and design patterns FOR THIS SPECIFIC VARIANT",
+       "techStack": ["Technology 1", "Technology 2", ...],
+       "architecture": "Description of the project architecture and structure",
+       "userFlow": ["Step 1: User action", "Step 2: System response", ...]
+     }
    }
 
-9. **Code Quality**:
-   - Use modern React patterns (hooks, functional components)
-   - Implement proper TypeScript types
-   - Add responsive design with CSS media queries
+5. **Code Quality**:
+   - Use modern patterns for the selected language/framework
+   - Implement proper type safety where applicable
+   - Add responsive design for web projects
    - Use semantic HTML elements
-   - Make the design beautiful and professional
-   - Follow Next.js 14+ App Router conventions
+   - Follow framework-specific best practices
    {databaseBestPractices}
 
-10. **For Greetings**: If user just says "Hi" or "Hello", respond with:
+6. **For Greetings**: If user just says "Hi" or "Hello", respond with:
    {
-     "message": "Hello! I'm ready to help you build amazing Next.js projects with beautiful CSS styling. What would you like to create?"
+     "message": "Hello! I'm ready to help you build projects in multiple languages and frameworks. What would you like to create?"
    }
 
-Now, create an amazing Next.js project for: {userInput}
+Now, create an amazing {selectedLanguage} project (VARIANT #{variantNumber}) for: {userInput}
 `
 
 function Playground() {
@@ -235,18 +173,19 @@ function Playground() {
   const [frameDetail, setFrameDetail] = useState<Frame>()
   const [loading, setLoading] = useState(false)
   const [messages, setMessages] = useState<Messages[]>([])
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([])
+  const [variants, setVariants] = useState<Variant[]>([])
+  const [activeVariantIndex, setActiveVariantIndex] = useState(0)
   const [saveTrigger, setSaveTrigger] = useState(0)
   const [designWidth, setDesignWidth] = useState(800)
   const [generatingFiles, setGeneratingFiles] = useState<{ path: string; status: "pending" | "complete" }[]>([])
   const [isRunningCommands, setIsRunningCommands] = useState(false)
   const [currentStep, setCurrentStep] = useState("")
   const [aiThinking, setAiThinking] = useState(false)
-  const [imageUrls, setImageUrls] = useState<string[]>([])
   const [thinkingTime, setThinkingTime] = useState(0)
   const [deploymentUrl, setDeploymentUrl] = useState<string | null>(null)
+  const [streamingMessage, setStreamingMessage] = useState("")
   const thinkingTimerRef = useRef<NodeJS.Timeout | null>(null)
-  const popoverId = useId() // Generate stable ID for Popover
+  const [generatingVariants, setGeneratingVariants] = useState<number[]>([])
 
   // Default project files to ensure iframe has content
   const defaultProjectFiles: ProjectFile[] = [
@@ -436,9 +375,13 @@ p {
       GetFrameDetails()
       checkDeployment()
     } else if (!user) {
-      console.log("User not authenticated")
-      // Initialize with default files if no user is authenticated
-      setProjectFiles(defaultProjectFiles)
+      console.log("[v0] User not authenticated, using default files")
+      setVariants([
+        { variantNumber: 1, projectFiles: defaultProjectFiles },
+        { variantNumber: 2, projectFiles: defaultProjectFiles },
+        { variantNumber: 3, projectFiles: defaultProjectFiles },
+        { variantNumber: 4, projectFiles: defaultProjectFiles },
+      ])
     }
   }, [frameId, projectId, isLoaded, user])
 
@@ -448,26 +391,24 @@ p {
     }, 1000)
 
     return () => clearTimeout(timer)
-  }, [projectFiles])
+  }, [variants])
 
   const saveFrameData = async () => {
     if (!user || !frameId || !projectId || !messages.length) return
     try {
       await axios.put("/api/frames", {
-        designCode: JSON.stringify(projectFiles),
+        designCode: JSON.stringify(variants[activeVariantIndex]?.projectFiles || []),
         chatMessages: messages,
         frameId,
         projectId,
+        prdData: variants[activeVariantIndex]?.prdData
+          ? JSON.stringify(variants[activeVariantIndex].prdData)
+          : undefined,
+        variants: variants, // Save all variants
       })
-      console.log("Frame data saved successfully")
-      setFrameDetail((prev) =>
-        prev
-          ? { ...prev, chatMessages: messages, projectFiles }
-          : { projectId: projectId as string, frameId, designCode: "", chatMessages: messages, projectFiles },
-      )
+      console.log("[v0] Frame data with variants saved successfully")
     } catch (error: any) {
-      console.error("Error saving frame data:", error.message)
-      setMessages((prev) => [...prev, { role: "assistant", content: `Failed to save frame data: ${error.message}` }])
+      console.error("[v0] Error saving frame data:", error.message)
     }
   }
 
@@ -487,11 +428,7 @@ p {
         localStorage.setItem(`deploymentUrl_${projectId}`, response.data.url)
       }
     } catch (error: any) {
-      console.error("Failed to check deployment status:", error.message)
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `Failed to check deployment status: ${error.message}` },
-      ])
+      console.error("[v0] Failed to check deployment status:", error.message)
     }
   }
 
@@ -509,61 +446,87 @@ p {
     if (!user || !frameId || !projectId) return
     try {
       const result = await axios.get(`/api/frames?frameId=${frameId}&projectId=${projectId}`)
-      console.log("Fetched frame details:", result.data)
+      console.log("[v0] Fetched frame details:", result.data)
       setFrameDetail(result.data)
       const fetchedMessages = result.data.chatMessages || []
       setMessages(fetchedMessages)
-      if (result.data.designCode) {
+
+      if (result.data.variants && Array.isArray(result.data.variants) && result.data.variants.length > 0) {
+        setVariants(result.data.variants)
+      } else if (result.data.designCode) {
+        // Fallback: if no variants but has designCode, create one variant
         try {
           const parsed = JSON.parse(result.data.designCode)
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setProjectFiles(parsed)
+            setVariants([
+              { variantNumber: 1, projectFiles: parsed },
+              { variantNumber: 2, projectFiles: defaultProjectFiles },
+              { variantNumber: 3, projectFiles: defaultProjectFiles },
+              { variantNumber: 4, projectFiles: defaultProjectFiles },
+            ])
           } else {
-            console.warn("No valid project files found in designCode, using default files")
-            setProjectFiles(defaultProjectFiles)
+            setVariants([
+              { variantNumber: 1, projectFiles: defaultProjectFiles },
+              { variantNumber: 2, projectFiles: defaultProjectFiles },
+              { variantNumber: 3, projectFiles: defaultProjectFiles },
+              { variantNumber: 4, projectFiles: defaultProjectFiles },
+            ])
           }
         } catch (error: any) {
-          console.error("Error parsing designCode:", error.message)
-          setProjectFiles(defaultProjectFiles)
-          setMessages((prev) => [
-            ...prev,
-            { role: "assistant", content: `Failed to parse project files: ${error.message}. Using default files.` },
+          console.error("[v0] Error parsing designCode:", error.message)
+          setVariants([
+            { variantNumber: 1, projectFiles: defaultProjectFiles },
+            { variantNumber: 2, projectFiles: defaultProjectFiles },
+            { variantNumber: 3, projectFiles: defaultProjectFiles },
+            { variantNumber: 4, projectFiles: defaultProjectFiles },
           ])
         }
       } else {
-        console.log("No designCode found, initializing with default files")
-        setProjectFiles(defaultProjectFiles)
-      }
-      if (result.data.imageUrls) {
-        setImageUrls(result.data.imageUrls)
+        setVariants([
+          { variantNumber: 1, projectFiles: defaultProjectFiles },
+          { variantNumber: 2, projectFiles: defaultProjectFiles },
+          { variantNumber: 3, projectFiles: defaultProjectFiles },
+          { variantNumber: 4, projectFiles: defaultProjectFiles },
+        ])
       }
     } catch (error: any) {
-      console.error("Error fetching frame details:", error.message)
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `Failed to fetch frame details: ${error.message}. Using default files.` },
+      console.error("[v0] Error fetching frame details:", error.message)
+      setVariants([
+        { variantNumber: 1, projectFiles: defaultProjectFiles },
+        { variantNumber: 2, projectFiles: defaultProjectFiles },
+        { variantNumber: 3, projectFiles: defaultProjectFiles },
+        { variantNumber: 4, projectFiles: defaultProjectFiles },
       ])
-      setProjectFiles(defaultProjectFiles)
     }
   }
 
-  const SendMessage = async (userInput: string, selectedModel: string, dbConnection?: any, files?: File[]) => {
+  const SendMessage = async (
+    userInput: string,
+    selectedModel: string,
+    selectedLanguage: string,
+    dbConnection?: any,
+    files?: File[],
+  ) => {
     if (!user || !frameId || !projectId) {
-      console.error("Missing required params for SendMessage: user, frameId, projectId")
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Please sign in and ensure a valid project is selected." },
-      ])
+      console.error("[v0] Missing required params for SendMessage")
+      const errorMsg: Messages = {
+        role: "assistant",
+        content: "Please sign in and ensure a valid project is selected.",
+      }
+      setMessages((prev) => [...prev, errorMsg])
       return
     }
 
     try {
       const newUserMsg: Messages = { role: "user", content: userInput }
       setMessages((prev) => [...prev, newUserMsg])
+
       setLoading(true)
       setGeneratingFiles([])
       setAiThinking(true)
-      setCurrentStep("")
+      setStreamingMessage("")
+      setGeneratingVariants([1, 2, 3, 4])
+      setCurrentStep("🤔 Thinking about your request and preparing 4 unique variants...")
 
       let fileContents: string[] = []
       if (files && files.length > 0) {
@@ -578,10 +541,32 @@ p {
         )
       }
 
+      let languageDisplayName = ""
+      switch (selectedLanguage) {
+        case "html":
+          languageDisplayName = "HTML, CSS, and JavaScript"
+          break
+        case "python":
+          languageDisplayName = "Python"
+          break
+        case "nextjs":
+          languageDisplayName = "Next.js + TypeScript"
+          break
+        case "vite":
+          languageDisplayName = "Vite + React"
+          break
+        case "vue":
+          languageDisplayName = "Vue.js"
+          break
+        case "react":
+          languageDisplayName = "React"
+          break
+        default:
+          languageDisplayName = "Next.js + TypeScript"
+      }
+
       let databaseContext = ""
       let databaseInstructions = "No database is connected. Generate a standalone application."
-      let databaseFiles = ""
-      let databaseFilesExample = ""
       let databaseBestPractices = ""
 
       if (dbConnection) {
@@ -593,32 +578,18 @@ Project ID: ${dbConnection.config.projectId}
 Region: ${dbConnection.config.region}
 `
           databaseInstructions = `
-The user has connected a Supabase database. You MUST integrate Supabase into the generated project:
-- Create a lib/supabase.ts file with Supabase client configuration
+The user has connected a Supabase database. You MUST integrate Supabase into the generated ${languageDisplayName} project:
+- Create appropriate database client configuration for ${languageDisplayName}
 - Use environment variables for Supabase URL and anon key
-- Include database operations in your components (queries, mutations)
+- Include database operations (queries, mutations)
 - Add proper error handling for database operations
 - Use Supabase's real-time features if appropriate for the use case
 `
-          databaseFiles = `
-   - lib/supabase.ts (Supabase client configuration)
-   - .env.local.example (example environment variables)
-`
-          databaseFilesExample = `,
-       {
-         "path": "lib/supabase.ts",
-         "content": "... Supabase client setup ..."
-       },
-       {
-         "path": ".env.local.example",
-         "content": "NEXT_PUBLIC_SUPABASE_URL=your-project-url\\nNEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key"
-       }
-`
           databaseBestPractices = `
    - Use Supabase client-side for real-time subscriptions
-   - Use Server Actions for mutations when possible
    - Implement Row Level Security (RLS) policies
    - Handle loading and error states for database operations
+   - Use appropriate database patterns for ${languageDisplayName}
 `
         } else if (dbConnection.provider === "firebase") {
           databaseContext = `
@@ -627,203 +598,137 @@ Project: ${dbConnection.connectionName}
 Project ID: ${dbConnection.config.projectId}
 `
           databaseInstructions = `
-The user has connected a Firebase database. You MUST integrate Firebase into the generated project:
-- Create a lib/firebase.ts file with Firebase configuration
+The user has connected a Firebase database. You MUST integrate Firebase into the generated ${languageDisplayName} project:
+- Create appropriate Firebase configuration for ${languageDisplayName}
 - Use the provided Firebase config (apiKey, authDomain, projectId, etc.)
-- Include Firestore database operations in your components
+- Include Firestore database operations
 - Add proper error handling for database operations
 - Use Firebase's real-time listeners if appropriate for the use case
-`
-          databaseFiles = `
-   - lib/firebase.ts (Firebase configuration and initialization)
-`
-          databaseFilesExample = `,
-       {
-         "path": "lib/firebase.ts",
-         "content": "... Firebase initialization with provided config ..."
-       }
 `
           databaseBestPractices = `
    - Use Firebase client SDK for real-time updates
    - Implement proper security rules
    - Handle loading and error states for database operations
-   - Use Firebase collections and documents appropriately
+   - Use Firebase collections and documents appropriately for ${languageDisplayName}
 `
         }
       }
 
-      const enhancedPrompt = Prompt.replace(/{userInput}/g, userInput)
-        .replace(/{databaseContext}/g, databaseContext)
-        .replace(/{databaseInstructions}/g, databaseInstructions)
-        .replace(/{databaseFiles}/g, databaseFiles)
-        .replace(/{databaseFilesExample}/g, databaseFilesExample)
-        .replace(/{databaseBestPractices}/g, databaseBestPractices)
+      const streamingMsgIndex = messages.length + 1
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Generating 4 unique design variants for you...", streaming: true },
+      ])
 
-      const fullPrompt = `${enhancedPrompt}\n${fileContents.join("\n")}`
+      const newVariants: Variant[] = []
 
-      const result = await fetch("/api/ai-model", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: selectedModel,
-          messages: [{ role: "user", content: fullPrompt }],
-        }),
-      })
+      for (let variantNum = 1; variantNum <= 4; variantNum++) {
+        setCurrentStep(`✨ Generating Variant ${variantNum} of 4...`)
 
-      if (!result.ok) {
-        throw new Error(`AI model API error: ${result.status}`)
+        const enhancedPrompt = Prompt.replace(/{userInput}/g, userInput)
+          .replace(/{selectedLanguage}/g, languageDisplayName)
+          .replace(/{variantNumber}/g, variantNum.toString())
+          .replace(/{databaseContext}/g, databaseContext)
+          .replace(/{databaseInstructions}/g, databaseInstructions)
+          .replace(/{databaseBestPractices}/g, databaseBestPractices)
+
+        const fullPrompt = `${enhancedPrompt}\n${fileContents.join("\n")}`
+
+        const result = await fetch("/api/ai-model", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: selectedModel,
+            messages: [{ role: "user", content: fullPrompt }],
+          }),
+        })
+
+        if (!result.ok) {
+          throw new Error(`AI model API error: ${result.status} - ${result.statusText}`)
+        }
+
+        const reader = result.body?.getReader()
+        const decoder = new TextDecoder()
+        let aiResponse = ""
+
+        while (true) {
+          const { done, value } = await reader!.read()
+          if (done) break
+          const chunk = decoder.decode(value, { stream: true })
+          aiResponse += chunk
+        }
+
+        console.log(`[v0] Variant ${variantNum} response length:`, aiResponse.length)
+
+        try {
+          let jsonStr = aiResponse.trim()
+          jsonStr = jsonStr.replace(/```json\s*/g, "").replace(/```\s*/g, "")
+
+          const jsonObjects: string[] = []
+          let currentDepth = 0
+          let startIndex = -1
+
+          for (let i = 0; i < jsonStr.length; i++) {
+            if (jsonStr[i] === "{") {
+              if (currentDepth === 0) startIndex = i
+              currentDepth++
+            } else if (jsonStr[i] === "}") {
+              currentDepth--
+              if (currentDepth === 0 && startIndex !== -1) {
+                jsonObjects.push(jsonStr.substring(startIndex, i + 1))
+                startIndex = -1
+              }
+            }
+          }
+
+          let parsed: any = null
+          for (const objStr of jsonObjects) {
+            try {
+              parsed = JSON.parse(objStr)
+              if (parsed.files) break
+            } catch (err) {
+              console.warn(`[v0] Failed to parse JSON for variant ${variantNum}`)
+            }
+          }
+
+          if (parsed && parsed.files && Array.isArray(parsed.files)) {
+            newVariants.push({
+              variantNumber: variantNum,
+              projectFiles: parsed.files,
+              prdData: parsed.prd ? { ...parsed.prd, timestamp: new Date().toISOString() } : undefined,
+              imageUrls: parsed.imageUrls || [],
+            })
+            setGeneratingVariants((prev) => prev.filter((v) => v !== variantNum))
+          } else {
+            // Fallback to default files for this variant
+            newVariants.push({
+              variantNumber: variantNum,
+              projectFiles: defaultProjectFiles,
+            })
+          }
+        } catch (error: any) {
+          console.error(`[v0] Error parsing variant ${variantNum}:`, error)
+          newVariants.push({
+            variantNumber: variantNum,
+            projectFiles: defaultProjectFiles,
+          })
+        }
       }
 
       setAiThinking(false)
-      setCurrentStep(
-        dbConnection
-          ? `Analyzing your request and integrating ${dbConnection.provider}...`
-          : "Analyzing your request...",
-      )
+      setGeneratingVariants([])
+      setCurrentStep("")
+      setVariants(newVariants)
 
-      const reader = result.body?.getReader()
-      const decoder = new TextDecoder()
-      let aiResponse = ""
-
-      while (true) {
-        //@ts-ignore
-        const { done, value } = await reader?.read()
-        if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        aiResponse += chunk
+      const successMsg: Messages = {
+        role: "assistant",
+        content: `✅ Successfully generated 4 unique ${languageDisplayName} variants! Click on the variant cards on the right to switch between different designs. Each variant has a unique visual style and approach.`,
       }
 
-      console.log("[v0] Raw AI response length:", aiResponse.length)
-
-      let newProjectFiles: ProjectFile[] = []
-      let responseMessage = ""
-      let newImageUrls: string[] = []
-
-      setCurrentStep("Preparing project structure...")
-
-      try {
-        let jsonStr = aiResponse.trim()
-        jsonStr = jsonStr.replace(/```json\s*/g, "").replace(/```\s*/g, "")
-
-        const jsonObjects: string[] = []
-        let currentDepth = 0
-        let startIndex = -1
-
-        for (let i = 0; i < jsonStr.length; i++) {
-          if (jsonStr[i] === "{") {
-            if (currentDepth === 0) startIndex = i
-            currentDepth++
-          } else if (jsonStr[i] === "}") {
-            currentDepth--
-            if (currentDepth === 0 && startIndex !== -1) {
-              jsonObjects.push(jsonStr.substring(startIndex, i + 1))
-              startIndex = -1
-            }
-          }
-        }
-
-        console.log("[v0] Found", jsonObjects.length, "potential JSON objects")
-
-        let parsed: any = null
-        let parseError: any = null
-
-        for (const objStr of jsonObjects) {
-          try {
-            parsed = JSON.parse(objStr)
-            if (parsed.files || parsed.message) {
-              break
-            }
-          } catch (err) {
-            parseError = err
-            console.warn("[v0] Failed to parse JSON object:", objStr.substring(0, 100), "...", err)
-          }
-        }
-
-        if (!parsed && parseError) {
-          const fixedJson = jsonStr
-            .replace(/\\(?!["\\/bfnrtu])/g, "\\\\")
-            .replace(/\n/g, "\\n")
-            .replace(/\r/g, "\\r")
-            .replace(/\t/g, "\\t")
-            .replace(/,\s*}/g, "}")
-            .replace(/,\s*]/g, "]")
-
-          try {
-            parsed = JSON.parse(fixedJson)
-            console.log("[v0] Successfully parsed JSON after fixes")
-          } catch (secondError) {
-            console.error("[v0] Still failed after fixes:", secondError.message)
-            throw new Error(`Failed to parse AI response: ${parseError.message}`)
-          }
-        }
-
-        if (parsed.files && Array.isArray(parsed.files) && parsed.files.length > 0) {
-          newProjectFiles = parsed.files
-          newImageUrls = parsed.imageUrls || []
-          setCurrentStep("Creating project files...")
-          setGeneratingFiles(newProjectFiles.map((f) => ({ path: f.path, status: "pending" })))
-
-          const dbMessage = dbConnection ? ` with ${dbConnection.provider} integration` : ""
-          const fileCreationMsg: Messages = {
-            role: "assistant",
-            content: `Creating ${newProjectFiles.length} files for your project${dbMessage}...`,
-          }
-          setMessages((prev) => [...prev, fileCreationMsg])
-
-          for (let i = 0; i < newProjectFiles.length; i++) {
-            await new Promise((resolve) => setTimeout(resolve, 150))
-            setGeneratingFiles((prev) => prev.map((f, idx) => (idx <= i ? { ...f, status: "complete" } : f)))
-          }
-
-          setProjectFiles(newProjectFiles)
-          setImageUrls(newImageUrls)
-          setCurrentStep("")
-
-          const detectedPackages = detectPackagesFromFiles(newProjectFiles)
-          const packageInfo =
-            detectedPackages.length > 0
-              ? ` Detected ${detectedPackages.length} additional packages to install: ${detectedPackages.join(", ")}.`
-              : ""
-
-          const dbSuccessMessage = dbConnection
-            ? ` Your ${dbConnection.provider} database has been integrated into the project.`
-            : ""
-          responseMessage = `Successfully created ${newProjectFiles.length} files!${packageInfo}${dbSuccessMessage} Installing dependencies...`
-          console.log("[v0] Successfully parsed", newProjectFiles.length, "files")
-        } else if (parsed.message) {
-          responseMessage = parsed.message
-          setCurrentStep("")
-        } else {
-          responseMessage =
-            "I generated a response, but couldn't find any files. Initializing with default project files."
-          setProjectFiles(defaultProjectFiles)
-          setCurrentStep("")
-        }
-      } catch (error: any) {
-        console.error("[v0] Error parsing AI response:", error)
-        responseMessage = `I had trouble parsing the response. Error: ${error.message}. Initializing with default project files.`
-        setProjectFiles(defaultProjectFiles)
-        setCurrentStep("")
-        setGeneratingFiles([])
-      }
-
-      const newAiMsg: Messages = { role: "assistant", content: responseMessage }
-      setMessages((prev) => [...prev, newAiMsg])
-      setFrameDetail((prev) =>
-        prev
-          ? {
-              ...prev,
-              chatMessages: [...(prev?.chatMessages || []), newAiMsg],
-              projectFiles: newProjectFiles.length > 0 ? newProjectFiles : defaultProjectFiles,
-            }
-          : {
-              projectId: projectId as string,
-              frameId,
-              designCode: "",
-              chatMessages: [newAiMsg],
-              projectFiles: newProjectFiles.length > 0 ? newProjectFiles : defaultProjectFiles,
-            },
-      )
+      setMessages((prev) => {
+        const filtered = prev.filter((_, idx) => idx !== streamingMsgIndex)
+        return [...filtered, successMsg]
+      })
 
       setTimeout(() => {
         setSaveTrigger((prev) => prev + 1)
@@ -835,13 +740,20 @@ The user has connected a Firebase database. You MUST integrate Firebase into the
       setAiThinking(false)
       setCurrentStep("")
       setGeneratingFiles([])
-      console.error("Error sending message:", error)
+      setGeneratingVariants([])
+      setStreamingMessage("")
+      console.error("[v0] Error sending message:", error)
       const errorMsg: Messages = {
         role: "assistant",
-        content: `Sorry, I encountered an error: ${error.message}. Initializing with default project files.`,
+        content: `❌ Sorry, I encountered an error: ${error.message}. Initializing with default variants.`,
       }
       setMessages((prev) => [...prev, errorMsg])
-      setProjectFiles(defaultProjectFiles)
+      setVariants([
+        { variantNumber: 1, projectFiles: defaultProjectFiles },
+        { variantNumber: 2, projectFiles: defaultProjectFiles },
+        { variantNumber: 3, projectFiles: defaultProjectFiles },
+        { variantNumber: 4, projectFiles: defaultProjectFiles },
+      ])
     }
   }
 
@@ -865,9 +777,30 @@ The user has connected a Firebase database. You MUST integrate Firebase into the
     }
   }, [aiThinking])
 
+  const currentProjectFiles = variants[activeVariantIndex]?.projectFiles || defaultProjectFiles
+  const currentPRDData = variants[activeVariantIndex]?.prdData || null
+
+  const handleFilesChange = (newFiles: ProjectFile[]) => {
+    setVariants((prev) => {
+      const updated = [...prev]
+      if (updated[activeVariantIndex]) {
+        updated[activeVariantIndex] = {
+          ...updated[activeVariantIndex],
+          projectFiles: newFiles,
+        }
+      }
+      return updated
+    })
+  }
+
   return (
-    <div className="h-screen flex flex-col">
-      <PlaygroundHeader onSave={handleManualSave} />
+    <div className="h-screen flex flex-col bg-[#1E1E21]">
+      <PlaygroundHeader
+        onSave={handleManualSave}
+        projectId={projectId as string}
+        messages={messages}
+        projectFiles={currentProjectFiles}
+      />
       <div className="flex flex-1 overflow-hidden">
         <ChatSection
           messages={messages}
@@ -879,10 +812,12 @@ The user has connected a Firebase database. You MUST integrate Firebase into the
           aiThinking={aiThinking}
           thinkingTime={thinkingTime}
           projectId={projectId as string}
+          streamingMessage={streamingMessage}
+          generatingVariants={generatingVariants}
         />
         <WebsiteDesign
-          projectFiles={projectFiles}
-          onFilesChange={setProjectFiles}
+          projectFiles={currentProjectFiles}
+          onFilesChange={handleFilesChange}
           width={designWidth}
           onWidthChange={setDesignWidth}
           onAutoRunStart={() => setIsRunningCommands(true)}
@@ -891,8 +826,10 @@ The user has connected a Firebase database. You MUST integrate Firebase into the
             setGeneratingFiles([])
           }}
           projectId={projectId as string}
-          deploymentUrl={deploymentUrl}
-          setDeploymentUrl={setDeploymentUrl}
+          prdData={currentPRDData}
+          variants={variants}
+          activeVariantIndex={activeVariantIndex}
+          onVariantChange={setActiveVariantIndex}
         />
       </div>
     </div>

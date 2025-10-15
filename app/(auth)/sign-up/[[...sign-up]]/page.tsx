@@ -374,7 +374,7 @@ export default function Page() {
           </p>
         </div>
       </div>
-      <div className="w-1/2 bg-cover bg-center" style={{ backgroundImage: "url(/bg-100.jpeg)" }}>
+      <div className="w-1/2 bg-cover bg-center" style={{ backgroundImage: "url(/bg-102.jpeg)" }}>
         <div className="h-full flex items-center justify-center">
           <p className="text-black text-center p-8 bg-none bg-opacity-50 font-sans font-light text-2xl">
             Your journey in website building, <br />maintenance, and assurance starts here.

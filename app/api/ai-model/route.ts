@@ -1,5 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import axios from "axios"
+import OpenAI from "openai"  // For GPT-5 SDK
+import Anthropic from "@anthropic-ai/sdk"
 
 export async function POST(req: NextRequest) {
   try {
@@ -9,14 +11,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No messages provided" }, { status: 400 })
     }
 
-    if (!model || !["gemini", "deepseek", "gpt-oss"].includes(model)) {
+    if (!model || !["gemini", "gpt-oss", "claude-code", "gpt-5-chat"].includes(model)) {
       return NextResponse.json({ error: "Invalid or missing model" }, { status: 400 })
     }
 
     // Extract user query from the last message
-    const userQuery = messages[messages.length - 1].content
-      .replace(/.*Now, create an amazing Next.js project for: (.*)/, "$1")
-      .trim()
+    const userQuery = messages[messages.length - 1].content.replace(/.*Now, create an amazing Next.js project for: (.*)/, "$1").trim()
 
     // Fetch images from Unsplash based on user query
     let imageUrls: string[] = []
@@ -52,11 +52,11 @@ export async function POST(req: NextRequest) {
       const resp = await axios.post(
         `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${apiKey}`,
         { contents },
-        { headers: { "Content-Type": "application/json" } },
+        { headers: { "Content-Type": "application/json" } }
       )
 
       let output = resp?.data?.candidates?.[0]?.content?.parts?.[0]?.text ?? resp?.data?.output ?? ""
-
+      
       // Append image URLs to the response if it's a JSON object with files
       try {
         const parsedOutput = JSON.parse(output)
@@ -71,65 +71,6 @@ export async function POST(req: NextRequest) {
       return new NextResponse(output, { headers: { "Content-Type": "text/plain; charset=utf-8" } })
     }
 
-    // === DEEPSEEK HANDLER ===
-    if (model === "deepseek") {
-      const apiKey = process.env.OPENROUTER_API_KEY
-      if (!apiKey) return NextResponse.json({ error: "DeepSeek API key not configured" }, { status: 500 })
-
-      const response = await axios.post(
-        "https://openrouter.ai/api/v1/chat/completions",
-        { model: "deepseek/deepseek-chat", messages, stream: true },
-        { headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" }, responseType: "stream" },
-      )
-
-      const stream = response.data
-      const encoder = new TextEncoder()
-
-      const readable = new ReadableStream({
-        async start(controller) {
-          let accumulatedData = ""
-          stream.on("data", (chunk: any) => {
-            const payLoads = chunk.toString().split("\n\n")
-            for (const payLoad of payLoads) {
-              if (payLoad.includes("[DONE]")) {
-                try {
-                  const parsedOutput = JSON.parse(accumulatedData)
-                  if (parsedOutput.files && Array.isArray(parsedOutput.files)) {
-                    parsedOutput.imageUrls = imageUrls
-                    controller.enqueue(encoder.encode(JSON.stringify(parsedOutput)))
-                  } else {
-                    controller.enqueue(encoder.encode(accumulatedData))
-                  }
-                } catch (error) {
-                  controller.enqueue(encoder.encode(accumulatedData))
-                }
-                return controller.close()
-              }
-              if (payLoad.startsWith("data:")) {
-                try {
-                  const data = JSON.parse(payLoad.replace("data:", ""))
-                  const text = data.choices[0].delta?.content
-                  if (text) {
-                    accumulatedData += text
-                    controller.enqueue(encoder.encode(text))
-                  }
-                } catch (err) {
-                  console.error("Error parsing stream", err)
-                }
-              }
-            }
-          })
-
-          stream.on("end", () => controller.close())
-          stream.on("error", (err: any) => controller.error(err))
-        },
-      })
-
-      return new NextResponse(readable, {
-        headers: { "Content-Type": "text/plain; charset=utf-8", "Transfer-Encoding": "chunked" },
-      })
-    }
-
     // === GPT-OSS HANDLER ===
     if (model === "gpt-oss") {
       const apiKey = process.env.OPENROUTER_API_KEY
@@ -138,11 +79,11 @@ export async function POST(req: NextRequest) {
       const response = await axios.post(
         "https://openrouter.ai/api/v1/chat/completions",
         { model: "openai/gpt-oss-20b:free", messages },
-        { headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" } },
+        { headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" } }
       )
 
       let output = response.data?.choices?.[0]?.message?.content ?? ""
-
+      
       // Append image URLs to the response if it's a JSON object with files
       try {
         const parsedOutput = JSON.parse(output)
@@ -155,6 +96,86 @@ export async function POST(req: NextRequest) {
       }
 
       return new NextResponse(output, { headers: { "Content-Type": "text/plain; charset=utf-8" } })
+    }
+
+    // === CLAUDE-CODE HANDLER ===
+    if (model === "claude-code") {
+      const apiKey = process.env.ANTHROPIC_API_KEY
+      if (!apiKey) return NextResponse.json({ error: "Anthropic API key not configured" }, { status: 500 })
+
+      // Initialize SDK client
+      const anthropic = new Anthropic({ apiKey });
+
+      // Convert messages to Anthropic format (role: "user" or "assistant")
+      const anthropicMessages = messages.map((msg: any) => ({
+        role: msg.role === "user" ? "user" : "assistant",
+        content: msg.content,
+      }));
+
+      try {
+        const response = await anthropic.messages.create({
+          model: "claude-3-5-sonnet-20240620",  // Underlying model for coding tasks
+          max_tokens: 1024,
+          messages: anthropicMessages,
+          temperature: 0.7,  // Adjustable for creativity
+        });
+
+        let output = response.content[0]?.text ?? "";
+
+        // Append image URLs to the response if it's a JSON object with files
+        try {
+          const parsedOutput = JSON.parse(output);
+          if (parsedOutput.files && Array.isArray(parsedOutput.files)) {
+            parsedOutput.imageUrls = imageUrls;
+            output = JSON.stringify(parsedOutput);
+          }
+        } catch (error) {
+          console.error("Error appending image URLs to Claude response:", error);
+        }
+
+        return new NextResponse(output, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
+      } catch (error: any) {
+        console.error("Claude API error:", error.message);
+        return NextResponse.json({ error: "Claude API request failed" }, { status: 500 });
+      }
+    }
+
+    // === GPT-5-CHAT HANDLER ===
+    if (model === "gpt-5-chat") {
+      const apiKey = process.env.GPT5_API_KEY
+      if (!apiKey) return NextResponse.json({ error: "GPT-5 API key not configured" }, { status: 500 })
+
+      // Initialize SDK
+      const openai = new OpenAI({ apiKey })
+
+      // Concatenate messages into a single input string for this API (supports multi-turn as context)
+      const input = messages.map((msg: any) => `${msg.role === 'user' ? 'User' : 'Assistant'}: ${msg.content}`).join('\n')
+
+      try {
+        const response = await openai.responses.create({
+          model: "gpt-5-nano",  // As per your code; swap to "gpt-5" if needed
+          input: input,
+          store: true,  // As per your code
+        })
+
+        let output = (await response).output_text ?? ""
+
+        // Append image URLs to the response if it's a JSON object with files
+        try {
+          const parsedOutput = JSON.parse(output)
+          if (parsedOutput.files && Array.isArray(parsedOutput.files)) {
+            parsedOutput.imageUrls = imageUrls
+            output = JSON.stringify(parsedOutput)
+          }
+        } catch (error) {
+          console.error("Error appending image URLs to GPT-5 response:", error)
+        }
+
+        return new NextResponse(output, { headers: { "Content-Type": "text/plain; charset=utf-8" } })
+      } catch (error: any) {
+        console.error("GPT-5 API error:", error.message)
+        return NextResponse.json({ error: "GPT-5 API request failed" }, { status: 500 })
+      }
     }
 
     return NextResponse.json({ error: "Unknown model" }, { status: 400 })
