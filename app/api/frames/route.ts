@@ -104,7 +104,7 @@ export async function PUT(req: NextRequest) {
       reasoning,
       filesGenerated,
       thinkingTime,
-      variants, // Accept array of 4 variants
+      variants,
     } = body
 
     if (!projectId || !frameId) {
