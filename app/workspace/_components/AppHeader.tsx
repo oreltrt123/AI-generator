@@ -10,7 +10,6 @@ import axios from 'axios'
 import { toast } from 'sonner'
 import { useRouter, usePathname } from 'next/navigation' // Import usePathname
 import Link from 'next/link'
-import Image from "next/image"
 
 function AppHeader() {
   const { user, isLoaded, isSignedIn } = useUser()
@@ -63,9 +62,8 @@ function AppHeader() {
           <div>
             {/* Conditionally render the Workspace button if not on /workspace */}
             {pathname !== '/workspace' && (
-              <Link href={'/'}>
-                <Image className="top-[-3px] ml-2 relative" src={"/logoIcon.png"} alt="logo" width={50} height={140} />
-                {/* <Button
+              <Link href={'/workspace'}>
+                <Button
                   className={`${buttonClassName} bg-blue-300 hover:bg-blue-300 text-white ml-2`}
                 >
                   {loading ? (
@@ -76,7 +74,7 @@ function AppHeader() {
                       <ArrowRight className="ml-1 h-4 w-4" />
                     </>
                   )}
-                </Button> */}
+                </Button>
               </Link>
             )}
           </div>
