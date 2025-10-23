@@ -8,11 +8,14 @@ import { ArrowRight, Loader2 } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 import axios from 'axios'
 import { toast } from 'sonner'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation' // Import usePathname
+import Link from 'next/link'
+import Image from "next/image"
 
 function AppHeader() {
   const { user, isLoaded, isSignedIn } = useUser()
   const router = useRouter()
+  const pathname = usePathname() // Get the current pathname
   const [loading, setLoading] = useState(false)
 
   // Helper: generate random frame number
@@ -56,22 +59,27 @@ function AppHeader() {
   return (
     <div className="flex justify-between items-center p-4 fixed w-full">
       <div className="flex items-center gap-2">
-        {/* <SidebarTrigger /> */}
         {isSignedIn ? (
-          <Button
-            onClick={handleCreateProject}
-            disabled={loading}
-            className={`${buttonClassName} bg-gray-300 hover:bg-gray-300 text-accent-foreground`}
-          >
-            {loading ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <>
-                Create Landing
-                <ArrowRight className="ml-1 h-4 w-4" />
-              </>
+          <div>
+            {/* Conditionally render the Workspace button if not on /workspace */}
+            {pathname !== '/workspace' && (
+              <Link href={'/'}>
+                <Image className="top-[-3px] ml-2 relative" src={"/logoIcon.png"} alt="logo" width={50} height={140} />
+                {/* <Button
+                  className={`${buttonClassName} bg-blue-300 hover:bg-blue-300 text-white ml-2`}
+                >
+                  {loading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <>
+                      Workspace
+                      <ArrowRight className="ml-1 h-4 w-4" />
+                    </>
+                  )}
+                </Button> */}
+              </Link>
             )}
-          </Button>
+          </div>
         ) : (
           <SignInButton mode="modal" forceRedirectUrl="/workspace">
             <Button

@@ -1,46 +1,55 @@
-import { type NextRequest, NextResponse } from "next/server"
-import axios from "axios"
+import { NextResponse } from "next/server";
+import OpenAI from "openai";
 
-export async function POST(req: NextRequest) {
+const client = new OpenAI({
+  apiKey: process.env.GPT5_API_KEY!,
+});
+
+export const runtime = "edge"; // enable streaming for faster responses
+
+export async function POST(req: Request) {
   try {
-    const { prompt } = await req.json()
+    const { prompt } = await req.json();
 
-    if (!prompt || typeof prompt !== "string") {
-      return NextResponse.json({ error: "Invalid prompt provided" }, { status: 400 })
+    if (!prompt || prompt.trim() === "") {
+      return NextResponse.json({ error: "No prompt provided" }, { status: 400 });
     }
 
-    const improvementPrompt = `You are an expert at writing detailed web development prompts. Take this basic prompt and expand it into a comprehensive brief that will generate a COMPLETE, MULTI-FILE web application.
+    // Instruction for improvement
+    const systemPrompt = `
+You are a professional AI prompt engineer.
+Improve the given text prompt so it becomes clearer, more creative, and more detailed.
+Make it more suitable for a web app prompt builder or AI assistant.
+Do NOT change the core meaning—just make it higher quality.
+Return only the improved prompt, no explanations.
+`;
 
-Original prompt: "${prompt}"
+    const stream = await client.chat.completions.create({
+      model: "gpt-5-chat",
+      stream: true,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: prompt },
+      ],
+    });
 
-Expand this into a detailed prompt (3-5 sentences) that specifies:
-- ALL pages/files needed (e.g., for "tasks app": dashboard, create task page, task list, task details, settings)
-- Specific functional features (forms, validation, data storage, search, filters)
-- Modern design requirements (clean layout, professional colors, smooth interactions)
-- Interactive elements needed (modals, dropdowns, charts, animations)
-
-Be specific about functionality and design, but keep it concise and actionable.`
-
-    const response = await axios.post(
-      "https://openrouter.ai/api/v1/chat/completions",
-      {
-        model: "openai/gpt-oss-20b:free",
-        messages: [{ role: "user", content: improvementPrompt }],
-        stream: false,
+    // Convert streaming data into a readable stream
+    const encoder = new TextEncoder();
+    const readable = new ReadableStream({
+      async start(controller) {
+        for await (const chunk of stream) {
+          const content = chunk.choices[0]?.delta?.content || "";
+          controller.enqueue(encoder.encode(content));
+        }
+        controller.close();
       },
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      },
-    )
+    });
 
-    const improvedPrompt = response.data.choices[0].message.content
-
-    return NextResponse.json({ improvedPrompt })
-  } catch (error: any) {
-    console.error("Prompt improvement error:", error)
-    return NextResponse.json({ error: "Failed to improve prompt" }, { status: 500 })
+    return new Response(readable, {
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
+  } catch (error) {
+    console.error("Error improving prompt:", error);
+    return NextResponse.json({ error: "Failed to improve prompt" }, { status: 500 });
   }
 }

@@ -4,6 +4,17 @@ import { db } from "@/config/db"
 import { vercelDeploymentsTable } from "@/config/schema"
 import { eq } from "drizzle-orm"
 
+// 🧠 Helper to remove the random suffix (like -p6ho6zafe)
+function cleanDomain(url: string): string {
+  try {
+    const domain = new URL(`https://${url.replace(/^https?:\/\//, "")}`).hostname
+    const cleaned = domain.replace(/-[a-z0-9]+\.vercel\.app$/, ".vercel.app")
+    return cleaned
+  } catch {
+    return url
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const user = await currentUser()
@@ -18,7 +29,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Missing projectId" }, { status: 400 })
     }
 
-    // Query the vercelDeploymentsTable for the deployment URL
     const deployment = await db
       .select()
       .from(vercelDeploymentsTable)
@@ -28,7 +38,7 @@ export async function GET(req: NextRequest) {
     if (deployment.length > 0 && deployment[0].deploymentUrl) {
       return NextResponse.json({
         deployed: true,
-        url: deployment[0].deploymentUrl,
+        url: `https://${deployment[0].deploymentUrl}`,
         deploymentId: deployment[0].vercelDeploymentId,
       })
     }
@@ -48,13 +58,11 @@ export async function POST(req: NextRequest) {
     }
 
     const { projectId, files } = await req.json()
-
     if (!projectId || !files || !Array.isArray(files)) {
       return NextResponse.json({ error: "Missing projectId or files" }, { status: 400 })
     }
 
     const vercelToken = process.env.VERCEL_TOKEN
-
     let deploymentUrl: string
     let deploymentId: string | undefined
 
@@ -83,11 +91,11 @@ export async function POST(req: NextRequest) {
         })
 
         if (!vercelResponse.ok) {
-          throw new Error("Vercel API error")
+          throw new Error(`Vercel API error: ${vercelResponse.status}`)
         }
 
         const deploymentData = await vercelResponse.json()
-        deploymentUrl = deploymentData.url
+        deploymentUrl = cleanDomain(deploymentData.url) // ✅ Clean the domain
         deploymentId = deploymentData.id
       } catch (vercelError) {
         console.error("[Deploy] Vercel API error:", vercelError)
@@ -95,10 +103,9 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Save deployment to vercelDeploymentsTable
     await db.insert(vercelDeploymentsTable).values({
       projectId,
-      deploymentUrl,
+      deploymentUrl, // already cleaned
       vercelDeploymentId: deploymentId,
       deployedBy: user.primaryEmailAddress.emailAddress,
       deployedOn: new Date(),
@@ -106,9 +113,11 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      url: deploymentUrl,
+      url: `https://${deploymentUrl}`,
       deploymentId,
-      message: vercelToken ? "Deployment successful" : "Deployment simulated (configure VERCEL_TOKEN for real deployments)",
+      message: vercelToken
+        ? "Deployment successful"
+        : "Deployment simulated (configure VERCEL_TOKEN for real deployments)",
     })
   } catch (error: any) {
     console.error("[Deploy POST] Error:", error)

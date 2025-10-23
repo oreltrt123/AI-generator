@@ -13,8 +13,21 @@ export const usersTable = pgTable("users", {
 export const projectTable = pgTable("projects", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
   projectId: varchar("projectId").notNull().unique(),
+  projectName: varchar("projectName", { length: 500 }).notNull().default("Untitled Project"),
   createdBy: varchar("createdBy").notNull(),
   createdOn: timestamp("createdOn").defaultNow(),
+  updatedOn: timestamp("updatedOn").defaultNow(),
+})
+
+export const projectCollaboratorsTable = pgTable("project_collaborators", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: varchar("projectId").notNull(),
+  userEmail: varchar("userEmail", { length: 255 }).notNull(),
+  invitedBy: varchar("invitedBy").notNull(),
+  role: varchar("role", { length: 50 }).default("viewer"), // viewer, editor, admin
+  status: varchar("status", { length: 50 }).default("pending"), // pending, accepted, rejected
+  invitedOn: timestamp("invitedOn").defaultNow(),
+  acceptedOn: timestamp("acceptedOn"),
 })
 
 // FRAMES TABLE
@@ -157,6 +170,14 @@ export const engagementMetricsTable = pgTable("engagement_metrics", {
 // Relations
 export const projectRelations = relations(projectTable, ({ many }) => ({
   frames: many(frameTable),
+  collaborators: many(projectCollaboratorsTable),
+}))
+
+export const collaboratorRelations = relations(projectCollaboratorsTable, ({ one }) => ({
+  project: one(projectTable, {
+    fields: [projectCollaboratorsTable.projectId],
+    references: [projectTable.projectId],
+  }),
 }))
 
 export const frameRelations = relations(frameTable, ({ one, many }) => ({

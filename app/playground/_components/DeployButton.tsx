@@ -28,7 +28,8 @@ export default function DeployButton({ projectFiles, projectId }: Props) {
         if (response.ok) {
           const data = await response.json()
           if (data.deployed) {
-            setDeploymentUrl(data.url)
+            const cleanUrl = cleanDomain(data.url)
+            setDeploymentUrl(cleanUrl)
             setIsAlreadyDeployed(true)
           }
         }
@@ -41,6 +42,17 @@ export default function DeployButton({ projectFiles, projectId }: Props) {
 
     checkDeployment()
   }, [projectId])
+
+  // ✨ Helper to remove the random suffix and return the clean domain
+  const cleanDomain = (url: string): string => {
+    try {
+      const domain = new URL(url).hostname
+      const cleaned = domain.replace(/-[a-z0-9]+\.vercel\.app$/, ".vercel.app")
+      return `https://${cleaned}`
+    } catch {
+      return url
+    }
+  }
 
   const handleDeploy = async () => {
     if (projectFiles.length === 0) {
@@ -64,15 +76,13 @@ export default function DeployButton({ projectFiles, projectId }: Props) {
     setDeploymentSteps(steps)
 
     try {
-      // Step 1: Preparing files
+      // Step 1
       setDeploymentSteps((prev) => prev.map((s, i) => (i === 0 ? { ...s, status: "in-progress" } : s)))
       await new Promise((resolve) => setTimeout(resolve, 800))
       setDeploymentSteps((prev) => prev.map((s, i) => (i === 0 ? { ...s, status: "complete" } : s)))
 
-      // Step 2-6: Real Vercel deployment
+      // Step 2 - Vercel deployment
       setDeploymentSteps((prev) => prev.map((s, i) => (i === 1 ? { ...s, status: "in-progress" } : s)))
-
-      console.log("[v0] Sending deployment request with", projectFiles.length, "files")
 
       const response = await fetch("/api/deploy", {
         method: "POST",
@@ -84,14 +94,11 @@ export default function DeployButton({ projectFiles, projectId }: Props) {
       })
 
       const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.details || data.error || "Deployment failed")
-      }
+      if (!response.ok) throw new Error(data.details || data.error || "Deployment failed")
 
       console.log("[v0] Deployment response:", data)
 
-      // Simulate progress through remaining steps
+      // Simulate step progress
       for (let i = 1; i < steps.length; i++) {
         setDeploymentSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, status: "complete" } : s)))
         if (i < steps.length - 1) {
@@ -100,7 +107,9 @@ export default function DeployButton({ projectFiles, projectId }: Props) {
         }
       }
 
-      setDeploymentUrl(data.url)
+      // ✅ Clean up URL and show correct domain
+      const cleanUrl = cleanDomain(data.url)
+      setDeploymentUrl(cleanUrl)
       setIsAlreadyDeployed(true)
       setIsDeploying(false)
     } catch (err: any) {
@@ -127,7 +136,7 @@ export default function DeployButton({ projectFiles, projectId }: Props) {
           href={deploymentUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="r2552esf25_252trewt3erblueFontDocs cursor-default flex items-center gap-2 px-4 py-2 bg-gray-300 rounded-lg text-sm text-black hover:bg-gray-300 transition-colors"
+          className="r2552esf25_252trewt3erblueFontDocs cursor-default flex items-center gap-2 px-4 py-2 bg-[#3a3838a2] hover:bg-[#3a3838e1] rounded-lg text-sm text-[#e5e6e6da] transition-colors"
         >
           {deploymentUrl}
           <ExternalLink className="w-3 h-3" />

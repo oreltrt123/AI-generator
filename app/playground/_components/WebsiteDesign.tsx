@@ -35,6 +35,7 @@ type Props = {
   variants?: Variant[]
   activeVariantIndex?: number
   onVariantChange?: (index: number) => void
+  liveCodeUpdates?: { path: string; content: string; isComplete: boolean }[] // Added for live streaming
 }
 
 type SelectedElement = {
@@ -60,6 +61,7 @@ function WebsiteDesign({
   variants = [],
   activeVariantIndex = 0,
   onVariantChange,
+  liveCodeUpdates = [], // Default to empty array
 }: Props) {
   const [webcontainer, setWebcontainer] = useState<any>(null)
   const [terminal, setTerminal] = useState<any>(null)
@@ -82,6 +84,9 @@ function WebsiteDesign({
   const [showEditor, setShowEditor] = useState(true)
   const [showPRD, setShowPRD] = useState(false)
   const [showVariantSidebar, setShowVariantSidebar] = useState(true)
+  const [isStreaming, setIsStreaming] = useState(false) // Track streaming state
+  const [streamedContent, setStreamedContent] = useState<string>("") // Store streamed content
+  const [streamedFilePath, setStreamedFilePath] = useState<string | null>(null) // Store streamed file path
 
   const terminalRef = useRef<HTMLDivElement>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
@@ -127,6 +132,7 @@ function WebsiteDesign({
     }
   }
 
+  // Initialize WebContainer
   useEffect(() => {
     let mounted = true
 
@@ -153,6 +159,7 @@ function WebsiteDesign({
     }
   }, [])
 
+  // Initialize Terminal
   useEffect(() => {
     if (!terminalRef.current || terminal || !containerReady) return
 
@@ -216,6 +223,7 @@ function WebsiteDesign({
     }
   }, [containerReady])
 
+  // Start Shell Process
   useEffect(() => {
     if (!webcontainer || !terminal || !terminalReady || shellProcessRef.current) return
 
@@ -257,6 +265,7 @@ function WebsiteDesign({
     startShell()
   }, [webcontainer, terminal, terminalReady])
 
+  // Load Files into WebContainer
   useEffect(() => {
     if (!webcontainer || !containerReady || projectFiles.length === 0) return
 
@@ -371,6 +380,38 @@ function WebsiteDesign({
 
     loadFiles()
   }, [webcontainer, containerReady, projectFiles])
+
+  // Handle Live Code Updates
+  useEffect(() => {
+    if (liveCodeUpdates.length === 0) return
+
+    const latestUpdate = liveCodeUpdates[liveCodeUpdates.length - 1]
+    setIsStreaming(!latestUpdate.isComplete)
+    setStreamedFilePath(latestUpdate.path)
+    setStreamedContent(latestUpdate.content)
+
+    if (latestUpdate.isComplete) {
+      // Update projectFiles and WebContainer when streaming is complete
+      const updatedFiles = projectFiles.some((f) => f.path === latestUpdate.path)
+        ? projectFiles.map((f) =>
+            f.path === latestUpdate.path ? { ...f, content: latestUpdate.content } : f
+          )
+        : [...projectFiles, { path: latestUpdate.path, content: latestUpdate.content }]
+
+      onFilesChange(updatedFiles)
+
+      if (webcontainer && containerReady) {
+        webcontainer.fs.writeFile(latestUpdate.path, latestUpdate.content).catch((err: any) => {
+          console.error("[v0] Error writing live update to WebContainer:", err)
+        })
+      }
+
+      // Select the updated file in the code view
+      setSelectedFile(latestUpdate.path)
+      setFileContent(latestUpdate.content)
+      setViewMode("code")
+    }
+  }, [liveCodeUpdates, projectFiles, webcontainer, containerReady, onFilesChange])
 
   const autoRunDevServer = async () => {
     if (!webcontainer || !containerReady || isRunning) {
@@ -881,309 +922,362 @@ function WebsiteDesign({
 
   return (
     <div
-      className="flex-1 flex flex-col bg-[#333437] mr-2 relative rounded-2xl mt-2"
+      className="flex-3 flex flex-col bg-[#333437] mr-2 relative rounded-lg mt-2 mb-3"
       style={{ width: `${width}px`, minWidth: "400px" }}
     >
-      <div className="flex items-center justify-between p-3 border-b bg-[#333437] border border-[#444547] rounded-2xl rounded-b-none">
-        <div className="text-sm font-mono flex">
-          <button
-            onClick={() => setViewMode("preview")}
-            className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
-              ${viewMode === "preview" ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-r-0"} 
-              rounded-tl-lg rounded-tr-none rounded-bl-lg rounded-br-none 
-              transition-colors`}
-          >
-            <Eye className="w-4 h-4" />
-          </button>
+      <div className="flex items-center justify-between p-3 border-b bg-[#333437] border border-[#4445474f] rounded-2xl rounded-b-none">
+        {isStreaming ? (
+          <div className="text-sm font-mono text-white">Streaming AI Code...</div>
+        ) : (
+          <div className="text-sm font-mono flex">
+            <button
+              onClick={() => setViewMode("preview")}
+              className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
+                ${viewMode === "preview" ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-r-0"} 
+                rounded-tl-lg rounded-tr-none rounded-bl-lg rounded-br-none 
+                transition-colors`}
+            >
+              <Eye className="w-4 h-4" />
+            </button>
 
-          <button
-            onClick={() => setViewMode("code")}
-            className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
-              ${viewMode === "code" ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-r-0 border-l-0"}
-              rounded-none
-              transition-colors`}
-          >
-            <Code2 className="w-4 h-4" />
-          </button>
+            <button
+              onClick={() => setViewMode("code")}
+              className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
+                ${viewMode === "code" ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-r-0 border-l-0"}
+                rounded-none
+                transition-colors`}
+            >
+              <Code2 className="w-4 h-4" />
+            </button>
 
-          <button
-            onClick={() => setEditMode((prev) => !prev)}
-            className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
-              ${editMode ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-r-0 border-l-0"}
-              rounded-none
-              transition-colors`}
-            disabled={viewMode !== "preview"}
-          >
-            <MousePointer2 className="w-4 h-4" />
-          </button>
+            <button
+              onClick={() => setEditMode((prev) => !prev)}
+              className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
+                ${editMode ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-r-0 border-l-0"}
+                rounded-none
+                transition-colors`}
+              disabled={viewMode !== "preview"}
+            >
+              <MousePointer2 className="w-4 h-4" />
+            </button>
 
-          <button
-            onClick={toggleTerminal}
-            className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
-              ${showTerminal ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-r-0 border-l-0"}
-              rounded-none
-              transition-colors`}
-          >
-            <TerminalIcon className="w-4 h-4" />
-          </button>
+            <button
+              onClick={toggleTerminal}
+              className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
+                ${showTerminal ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-r-0 border-l-0"}
+                rounded-none
+                transition-colors`}
+            >
+              <TerminalIcon className="w-4 h-4" />
+            </button>
 
-          <button
-            onClick={() => setShowPRD((prev) => !prev)}
-            className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
-              ${showPRD ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-r-0 border-l-0"}
-              rounded-none
-              transition-colors`}
-            title="View Product Requirements Document"
-          >
-            <FileText className="w-4 h-4" />
-          </button>
+            <button
+              onClick={() => setShowPRD((prev) => !prev)}
+              className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
+                ${showPRD ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-r-0 border-l-0"}
+                rounded-none
+                transition-colors`}
+              title="View Product Requirements Document"
+            >
+              <FileText className="w-4 h-4" />
+            </button>
 
-          <button
-            onClick={() => setShowVariantSidebar((prev) => !prev)}
-            className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
-              ${showVariantSidebar ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-l-0"}
-              rounded-tr-lg rounded-br-lg
-              transition-colors`}
-            title="Toggle Variant Selector"
-          >
-            <Layers className="w-4 h-4" />
-          </button>
-        </div>
+            <button
+              onClick={() => setShowVariantSidebar((prev) => !prev)}
+              className={`flex items-center justify-center gap-2 px-3 py-1 text-sm font-medium
+                ${showVariantSidebar ? "bg-[#444547] text-white" : "bg-[#171719] text-white border border-[#444547] border-l-0"}
+                rounded-tr-lg rounded-br-lg
+                transition-colors`}
+              title="Toggle Variant Selector"
+            >
+              <Layers className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+                              <div className="p-2 relative left-[-80px]">
+          <div className="relative w-[100%] r2552esf25_252trewt3erblueFontDoc134s border border-[#444547] rounded-4xl dropdown-animation">
+              <div
+                key={previewUrl}
+                className="flex items-center px-4 py-2 cursor-pointer hover:bg-bolt-elements-item-backgroundActive"
+              >
+                <span
+                  className={
+                      'text-bolt-elements-item-contentDefault group-hover:text-bolt-elements-item-contentActive text-[#e5e6e6da] mt-[-8px]'
+                  }
+                >
+                  {previewUrl}
+                </span>
+              </div>
+          </div>
+                      </div>
         <DeployButton projectFiles={projectFiles} projectId={projectId} />
       </div>
 
       <div className="flex flex-1 overflow-hidden">
         <div
-          className={`flex flex-1 overflow-hidden border-l-1 border-[#444547] rounded-b-2xl transition-all duration-300 ${sidebarOpen ? `w-[${width - sidebarWidth}px]` : "w-full"}`}
+          className={`flex flex-1 overflow-hidden border-l-1 border-[#4445474f] rounded-b-lg transition-all duration-300 ${sidebarOpen ? `w-[${width - sidebarWidth}px]` : "w-full"}`}
         >
-          {viewMode === "code" && (
-            <div className="w-64 border-r border-b bg-bg-[#333437] overflow-auto border-[#444547] rounded-bl-2xl">
-              <div className="p-2 border-b flex items-center justify-between bg-[#333437] border-[#444547]">
-                <span className="text-xs font-semibold text-white">FILES</span>
-                <span className="text-xs text-white">{projectFiles.length} files</span>
+          {isStreaming ? (
+            <div className="flex-1 flex flex-col bg-[#1e1e1e]">
+              <div className="p-2 border-b flex items-center justify-between bg-[#333437] border-[#4445474f]">
+                <span className="text-xs font-semibold text-white">{streamedFilePath || "Streaming Code"}</span>
               </div>
-              {renderFileTree()}
+              <SyntaxHighlighter
+                language={getSyntaxLanguage(streamedFilePath)}
+                style={materialDark}
+                wrapLines={true}
+                showLineNumbers={true}
+                lineNumberStyle={{ color: "#6b7280", fontSize: "12px" }}
+                customStyle={{
+                  margin: 0,
+                  padding: "1rem",
+                  height: "100%",
+                  overflow: "auto",
+                  background: "#1e1e1e",
+                  fontSize: "14px",
+                }}
+              >
+                {streamedContent || "// Waiting for AI to generate code..."}
+              </SyntaxHighlighter>
             </div>
-          )}
-
-          <div className="flex-1 flex flex-col">
-            <div className="flex-1 flex flex-col border-b border-r-1 border-[#444547]">
-              {viewMode === "code" && selectedFile ? (
-                <>
-                  <div className="w-full border-r border-[#444547] bg-[#333437] overflow-auto">
-                    <div className="p-2 border-b flex items-center justify-between bg-[#333437] border-[#444547]">
-                      <span className="text-xs font-semibold text-white">{selectedFile}</span>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => setShowEditor(!showEditor)} className="text-xs font-semibold text-white">
-                          {showEditor ? "Show Highlighted" : "Show Editor"}
-                        </button>
-                        <button
-                          onClick={() => {
-                            setSelectedFile(null)
-                            setFileContent("")
-                          }}
-                          className="text-xs font-semibold text-white"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
+          ) : (
+            <>
+              {viewMode === "code" && (
+                <div className="w-64 border-r border-b bg-bg-[#333437] overflow-auto border-[#4445474f] rounded-bl-lg">
+                  <div className="p-2 border-b flex items-center justify-between bg-[#333437] border-[#4445474f]">
+                    <span className="text-xs font-semibold text-white">FILES</span>
+                    <span className="text-xs text-white">{projectFiles.length} files</span>
                   </div>
-                  {showEditor ? (
-                    <textarea
-                      value={fileContent}
-                      onChange={(e) => handleFileContentChange(e.target.value)}
-                      className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none bg-[#333437] text-white"
-                      spellCheck={false}
-                      placeholder="Edit your code here..."
-                      style={{ height: "100%" }}
-                    />
-                  ) : (
-                    <SyntaxHighlighter
-                      language={getSyntaxLanguage(selectedFile)}
-                      style={materialDark}
-                      wrapLines={true}
-                      showLineNumbers={true}
-                      lineNumberStyle={{ color: "#6b7280", fontSize: "12px" }}
-                      customStyle={{
-                        margin: 0,
-                        padding: "1rem",
-                        height: "100%",
-                        overflow: "auto",
-                        background: "#1e1e1e",
-                        fontSize: "14px",
-                      }}
-                    >
-                      {fileContent}
-                    </SyntaxHighlighter>
-                  )}
-                </>
-              ) : viewMode === "code" && !selectedFile ? (
-                <div className="flex-1 flex items-center justify-center text-gray-400 bg-[#333437]">
-                  <div className="text-center">
-                    <img width={57} src="/icon/code.png" alt="" className="w-16 h-16 mx-auto mb-3 opacity-30" />
-                    <p className="text-sm font-sans font-light text-white">Select a file to edit</p>
-                    <p className="text-xs mt-1 font-sans font-light text-white">
-                      Choose from the file explorer on the left
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col">
-                  {previewUrl ? (
-                    <iframe
-                      ref={iframeRef}
-                      src={previewUrl}
-                      className="w-full h-full bg-white border-0 border-b-0"
-                      title="Preview"
-                      sandbox="allow-scripts allow-same-origin"
-                      onLoad={() => setIframeLoaded(true)}
-                    />
-                  ) : (
-                    <div className="flex items-center justify-center h-full text-gray-400 bg-white border border-b-0 border-r-0 border-t-0 border-l-0">
-                      <div className="text-center">
-                        <div className="w-16 h-16 mx-auto mb-3 border-4 border-blue-600 border-t-transparent rounded-full animate-spin opacity-30" />
-                        <p className="text-sm font-medium">Starting preview...</p>
-                        <p className="text-xs mt-1">Running npm install and dev server</p>
-                      </div>
-                    </div>
-                  )}
+                  {renderFileTree()}
                 </div>
               )}
-            </div>
 
-            {showPRD && prdData && (
-              <div className="h-96 border-t-0 border-[#444547] bg-[#333437] overflow-y-auto">
-                <div className="px-4 py-3 border-[#444547] bg-[#333437] border-b flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <FileText className="w-4 h-4 text-white" />
-                    <span className="text-sm font-semibold text-white">Product Requirements Document (PRD)</span>
-                  </div>
-                  <button
-                    onClick={() => setShowPRD(false)}
-                    className="p-1 hover:bg-[#3e3f42] text-white rounded transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="p-4 space-y-6">
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 bg-[#3e3f42] rounded-lg flex items-center justify-center">
-                        <FileText className="w-4 h-4 text-white" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-white">Features Implemented</h3>
-                    </div>
-                    <ul className="space-y-2 ml-10">
-                      {prdData.features.map((feature, idx) => (
-                        <li key={idx} className="flex items-start gap-2">
-                          <span className="text-blue-600 font-bold mt-1">•</span>
-                          <span className="text-sm text-white">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 bg-[#3e3f42] rounded-lg flex items-center justify-center">
-                        <Code2 className="w-4 h-4 text-white" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-white">Technology Stack</h3>
-                    </div>
-                    <div className="flex flex-wrap gap-2 ml-10">
-                      {prdData.techStack.map((tech, idx) => (
-                        <span
-                          key={idx}
-                          className="px-3 py-1 bg-[#3e3f42] text-white rounded-full text-xs font-medium border border-[#444547]"
-                        >
-                          {tech}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 bg-[#3e3f42] rounded-lg flex items-center justify-center">
-                        <GitBranch className="w-4 h-4 text-white" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-white">Design Reasoning</h3>
-                    </div>
-                    <p className="text-sm text-white ml-10 leading-relaxed">{prdData.reasoning}</p>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 bg-[#3e3f42] rounded-lg flex items-center justify-center">
-                        <FolderOpen className="w-4 h-4 text-white" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-white">Project Architecture</h3>
-                    </div>
-                    <p className="text-sm text-white ml-10 leading-relaxed">{prdData.architecture}</p>
-                  </div>
-
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 bg-[#3e3f42] rounded-lg flex items-center justify-center">
-                        <Workflow className="w-4 h-4 text-white" />
-                      </div>
-                      <h3 className="text-lg font-semibold text-white">User Flow</h3>
-                    </div>
-                    <div className="ml-10 space-y-3">
-                      {prdData.userFlow.map((step, idx) => (
-                        <div key={idx} className="flex items-start gap-3">
-                          <div className="flex-shrink-0 w-6 h-6 bg-[#3e3f42] rounded-full flex items-center justify-center">
-                            <span className="text-xs font-bold text-white">{idx + 1}</span>
-                          </div>
-                          <div className="flex-1">
-                            <p className="text-sm text-white">{step}</p>
-                            {idx < prdData.userFlow.length - 1 && <div className="w-0.5 h-4 bg-[#3e3f42] ml-3 mt-1" />}
+              <div className="flex-1 flex flex-col">
+                <div className="flex-1 flex flex-col border-b border-r-1 border-[#4445474f]">
+                  {viewMode === "code" && selectedFile ? (
+                    <>
+                      <div className="w-full border-r border-[#4445474f] bg-[#333437] overflow-auto">
+                        <div className="p-2 border-b flex items-center justify-between bg-[#333437] border-[#4445474f]">
+                          <span className="text-xs font-semibold text-white">{selectedFile}</span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setShowEditor(!showEditor)}
+                              className="text-xs font-semibold text-white"
+                            >
+                              {showEditor ? "Show Highlighted" : "Show Editor"}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedFile(null)
+                                setFileContent("")
+                              }}
+                              className="text-xs font-semibold text-white"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
                           </div>
                         </div>
-                      ))}
+                      </div>
+                      {showEditor ? (
+                        <textarea
+                          value={fileContent}
+                          onChange={(e) => handleFileContentChange(e.target.value)}
+                          className="flex-1 p-4 font-mono text-sm resize-none focus:outline-none bg-[#333437] text-white"
+                          spellCheck={false}
+                          placeholder="Edit your code here..."
+                          style={{ height: "100%" }}
+                        />
+                      ) : (
+                        <SyntaxHighlighter
+                          language={getSyntaxLanguage(selectedFile)}
+                          style={materialDark}
+                          wrapLines={true}
+                          showLineNumbers={true}
+                          lineNumberStyle={{ color: "#6b7280", fontSize: "12px" }}
+                          customStyle={{
+                            margin: 0,
+                            padding: "1rem",
+                            height: "100%",
+                            overflow: "auto",
+                            background: "#1e1e1e",
+                            fontSize: "14px",
+                          }}
+                        >
+                          {fileContent}
+                        </SyntaxHighlighter>
+                      )}
+                    </>
+                  ) : viewMode === "code" && !selectedFile ? (
+                    <div className="flex-1 flex items-center justify-center text-gray-400 bg-[#333437]">
+                      <div className="text-center">
+                        <img width={57} src="/icon/code.png" alt="" className="w-16 h-16 mx-auto mb-3 opacity-30" />
+                        <p className="text-sm font-sans font-light text-white">Select a file to edit</p>
+                        <p className="text-xs mt-1 font-sans font-light text-white">
+                          Choose from the file explorer on the left
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex flex-col">
+                      {previewUrl ? (
+                        <iframe
+                          ref={iframeRef}
+                          src={previewUrl}
+                          className="w-full h-full bg-[#4445474f] border-0 border-b-0"
+                          title="Preview"
+                          sandbox="allow-scripts allow-same-origin"
+                          onLoad={() => setIframeLoaded(true)}
+                        />
+                      ) : (
+                        <div className="flex items-center justify-center h-full text-gray-400 bg-[#171818] border border-b-0 border-r-0 border-t-0 border-l-0">
+                          <div className="text-center">
+                            <p className="text-sm font-sans font-light">Starting preview...</p>
+                            <p className="text-xs mt-1">Running npm install and dev server</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {showPRD && prdData && (
+                  <div className="h-96 border-t-0 border-[#4445474f] bg-[#333437] overflow-y-auto">
+                    <div className="px-4 py-3 border-[#4445474f] bg-[#333437] border-b flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-white" />
+                        <span className="text-sm font-semibold text-white">Product Requirements Document (PRD)</span>
+                      </div>
+                      <button
+                        onClick={() => setShowPRD(false)}
+                        className="p-1 hover:bg-[#3e3f42] text-white rounded transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="p-4 space-y-6">
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-8 h-8 bg-[#3e3f42] rounded-lg flex items-center justify-center">
+                            <FileText className="w-4 h-4 text-white" />
+                          </div>
+                          <h3 className="text-lg font-semibold text-white">Features Implemented</h3>
+                        </div>
+                        <ul className="space-y-2 ml-10">
+                          {prdData.features.map((feature, idx) => (
+                            <li key={idx} className="flex items-start gap-2">
+                              <span className="text-blue-600 font-bold mt-1">•</span>
+                              <span className="text-sm text-white">{feature}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-8 h-8 bg-[#3e3f42] rounded-lg flex items-center justify-center">
+                            <Code2 className="w-4 h-4 text-white" />
+                          </div>
+                          <h3 className="text-lg font-semibold text-white">Technology Stack</h3>
+                        </div>
+                        <div className="flex flex-wrap gap-2 ml-10">
+                          {prdData.techStack.map((tech, idx) => (
+                            <span
+                              key={idx}
+                              className="px-3 py-1 bg-[#3e3f42] text-white rounded-full text-xs font-medium border border-[#444547]"
+                            >
+                              {tech}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-8 h-8 bg-[#3e3f42] rounded-lg flex items-center justify-center">
+                            <GitBranch className="w-4 h-4 text-white" />
+                          </div>
+                          <h3 className="text-lg font-semibold text-white">Design Reasoning</h3>
+                        </div>
+                        <p className="text-sm text-white ml-10 leading-relaxed">{prdData.reasoning}</p>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-8 h-8 bg-[#3e3f42] rounded-lg flex items-center justify-center">
+                            <FolderOpen className="w-4 h-4 text-white" />
+                          </div>
+                          <h3 className="text-lg font-semibold text-white">Project Architecture</h3>
+                        </div>
+                        <p className="text-sm text-white ml-10 leading-relaxed">{prdData.architecture}</p>
+                      </div>
+
+                      <div>
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="w-8 h-8 bg-[#3e3f42] rounded-lg flex items-center justify-center">
+                            <Workflow className="w-4 h-4 text-white" />
+                          </div>
+                          <h3 className="text-lg font-semibold text-white">User Flow</h3>
+                        </div>
+                        <div className="ml-10 space-y-3">
+                          {prdData.userFlow.map((step, idx) => (
+                            <div key={idx} className="flex items-start gap-3">
+                              <div className="flex-shrink-0 w-6 h-6 bg-[#3e3f42] rounded-full flex items-center justify-center">
+                                <span className="text-xs font-bold text-white">{idx + 1}</span>
+                              </div>
+                              <div className="flex-1">
+                                <p className="text-sm text-white">{step}</p>
+                                {idx < prdData.userFlow.length - 1 && (
+                                  <div className="w-0.5 h-4 bg-[#3e3f42] ml-3 mt-1" />
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="pt-4 border-t border-[#444547]">
+                        <p className="text-xs text-white">
+                          Generated on {new Date(prdData.timestamp).toLocaleString()}
+                        </p>
+                      </div>
                     </div>
                   </div>
+                )}
 
-                  <div className="pt-4 border-t border-[#444547]">
-                    <p className="text-xs text-white">Generated on {new Date(prdData.timestamp).toLocaleString()}</p>
+                {showTerminal && (
+                  <div className="h-56">
+                    <div className="px-3 py-2 bg-[#333437] text-white text-sm flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <TerminalIcon className="w-4 h-4" />
+                        <span>Terminal</span>
+                        {!terminalReady && <span className="text-xs text-gray-400">(Loading...)</span>}
+                      </div>
+                      <button
+                        onClick={() => setShowTerminal(false)}
+                        className="p-1 hover:bg-[#3e3f42] text-white rounded transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div
+                      ref={terminalRef}
+                      className="h-[calc(100%-40px)] overflow-y-scroll bg-[#333437] border-[#4445474f] p-4 border border-l-0 border-t-0"
+                    />
                   </div>
-                </div>
+                )}
               </div>
-            )}
 
-            {showTerminal && (
-              <div className="h-56">
-                <div className="px-3 py-2 bg-[#1e1e1e] text-white text-sm flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <TerminalIcon className="w-4 h-4" />
-                    <span>Terminal</span>
-                    {!terminalReady && <span className="text-xs text-gray-400">(Loading...)</span>}
-                  </div>
-                  <button
-                    onClick={() => setShowTerminal(false)}
-                    className="p-1 hover:bg-[#3e3f42] text-white rounded transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-                <div
-                  ref={terminalRef}
-                  className="h-[calc(100%-40px)] overflow-y-scroll bg-[#1e1e1e] border-[#444547] border border-l-0 border-t-0"
+              {sidebarOpen && selectedElement && (
+                <EditSidebar
+                  selectedElement={selectedElement}
+                  iframeWindow={iframeRef.current?.contentWindow || null}
+                  onClose={handleCloseSidebar}
+                  onUpdateStyle={updateStyle}
+                  onUpdateAlt={updateAlt}
                 />
-              </div>
-            )}
-          </div>
-
-          {sidebarOpen && selectedElement && (
-            <EditSidebar
-              selectedElement={selectedElement}
-              iframeWindow={iframeRef.current?.contentWindow || null}
-              onClose={handleCloseSidebar}
-              onUpdateStyle={updateStyle}
-              onUpdateAlt={updateAlt}
-            />
+              )}
+            </>
           )}
         </div>
 
@@ -1214,11 +1308,6 @@ function WebsiteDesign({
                   }`}
                 >
                   <div className="flex items-center gap-3 mb-2">
-                    {/* <div
-                      className={`w-10 h-10 rounded-lg bg-gradient-to-br ${variantStyles[index]?.color} flex items-center justify-center text-2xl`}
-                    >
-                      {variantStyles[index]?.icon}
-                    </div> */}
                     <div className="flex-1 text-left">
                       <div className="text-sm font-semibold text-white">Variant {variant.variantNumber}</div>
                       <div className="text-xs text-gray-400">{variantStyles[index]?.name}</div>
